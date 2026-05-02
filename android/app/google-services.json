@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "925653057177",
+    "project_id": "expense-manager-app-ea7ee",
+    "storage_bucket": "expense-manager-app-ea7ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:925653057177:android:49813716e0c83a5af14208",
+        "android_client_info": {
+          "package_name": "com.example.quanlychitieu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuUuKeakxHE7tiinhq5m2cFSc0CPKHlRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
