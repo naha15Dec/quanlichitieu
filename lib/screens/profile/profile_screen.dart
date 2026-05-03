@@ -143,7 +143,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final user = snapshot.data;
 
           if (user == null) {
-            return const Center(child: Text('Chưa có thông tin người dùng'));
+            _userService.createUserIfNotExists(
+              UserModel(
+                uid: firebaseUser.uid,
+                email: firebaseUser.email ?? '',
+                fullName: '',
+                phone: '',
+                avatarUrl: '',
+              ),
+            );
+
+            return const Center(child: CircularProgressIndicator());
           }
 
           fillData(user);
