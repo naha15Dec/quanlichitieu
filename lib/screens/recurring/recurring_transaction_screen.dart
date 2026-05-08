@@ -8,8 +8,10 @@ import '../../core/utils/vnd_input_formatter.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_text_field.dart';
+import '../../models/category_model.dart';
 import '../../models/recurring_transaction_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/category_service.dart';
 import '../../services/recurring_transaction_service.dart';
 
 class RecurringTransactionScreen extends StatefulWidget {
@@ -23,28 +25,23 @@ class RecurringTransactionScreen extends StatefulWidget {
 class _RecurringTransactionScreenState
     extends State<RecurringTransactionScreen> {
   final RecurringTransactionService _service = RecurringTransactionService();
+  final CategoryService _categoryService = CategoryService();
 
   bool isGenerating = false;
 
-  final List<String> expenseCategories = [
-    'Ăn uống',
-    'Mua sắm',
-    'Di chuyển',
-    'Học tập',
-    'Giải trí',
-    'Sức khỏe',
-    'Nhà cửa',
-    'Khác',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    initializeDefaultCategories();
+  }
 
-  final List<String> incomeCategories = [
-    'Lương',
-    'Thưởng',
-    'Làm thêm',
-    'Đầu tư',
-    'Quà tặng',
-    'Khác',
-  ];
+  Future<void> initializeDefaultCategories() async {
+    final user = AuthService().currentUser;
+
+    if (user == null) return;
+
+    await _categoryService.createDefaultCategoriesIfNeeded(user.uid);
+  }
 
   Future<void> generateDueTransactions(
     List<RecurringTransactionModel> items,
@@ -150,8 +147,6 @@ class _RecurringTransactionScreenState
       builder: (_) {
         return _RecurringTransactionFormSheet(
           recurring: recurring,
-          expenseCategories: expenseCategories,
-          incomeCategories: incomeCategories,
           onSaved: () {
             Navigator.pop(context);
           },
@@ -605,14 +600,10 @@ class _RecurringTransactionScreenState
 
 class _RecurringTransactionFormSheet extends StatefulWidget {
   final RecurringTransactionModel? recurring;
-  final List<String> expenseCategories;
-  final List<String> incomeCategories;
   final VoidCallback onSaved;
 
   const _RecurringTransactionFormSheet({
     required this.recurring,
-    required this.expenseCategories,
-    required this.incomeCategories,
     required this.onSaved,
   });
 
@@ -624,6 +615,7 @@ class _RecurringTransactionFormSheet extends StatefulWidget {
 class _RecurringTransactionFormSheetState
     extends State<_RecurringTransactionFormSheet> {
   final RecurringTransactionService _service = RecurringTransactionService();
+  final CategoryService _categoryService = CategoryService();
 
   late TextEditingController titleController;
   late TextEditingController amountController;
@@ -635,12 +627,6 @@ class _RecurringTransactionFormSheetState
   late DateTime selectedStartDate;
 
   bool isSaving = false;
-
-  List<String> get currentCategories {
-    return selectedType == 'income'
-        ? widget.incomeCategories
-        : widget.expenseCategories;
-  }
 
   @override
   void initState() {
@@ -659,20 +645,19 @@ class _RecurringTransactionFormSheetState
     noteController = TextEditingController(text: recurring?.note ?? '');
 
     selectedType = recurring?.type ?? 'expense';
+    selectedCategory = recurring?.category ?? '';
     selectedFrequency = recurring?.frequency ?? 'monthly';
     selectedStartDate = recurring?.startDate ?? DateTime.now();
 
-    final originalCategory = recurring?.category ?? '';
+    initializeDefaultCategories();
+  }
 
-    if (selectedType == 'income') {
-      selectedCategory = widget.incomeCategories.contains(originalCategory)
-          ? originalCategory
-          : widget.incomeCategories.first;
-    } else {
-      selectedCategory = widget.expenseCategories.contains(originalCategory)
-          ? originalCategory
-          : widget.expenseCategories.first;
-    }
+  Future<void> initializeDefaultCategories() async {
+    final user = AuthService().currentUser;
+
+    if (user == null) return;
+
+    await _categoryService.createDefaultCategoriesIfNeeded(user.uid);
   }
 
   Future<void> save() async {
@@ -694,6 +679,11 @@ class _RecurringTransactionFormSheetState
 
     if (amount <= 0) {
       showMessage('Số tiền phải lớn hơn 0');
+      return;
+    }
+
+    if (selectedCategory.trim().isEmpty) {
+      showMessage('Vui lòng chọn danh mục');
       return;
     }
 
@@ -781,16 +771,36 @@ class _RecurringTransactionFormSheetState
     });
   }
 
-  void changeType(String type) {
+  void changeType(String type, List<CategoryModel> categories) {
     setState(() {
       selectedType = type;
 
-      if (type == 'income') {
-        selectedCategory = widget.incomeCategories.first;
+      final newTypeCategories = categories.where((item) {
+        return item.type == type;
+      }).toList();
+
+      if (newTypeCategories.isNotEmpty) {
+        selectedCategory = newTypeCategories.first.name;
       } else {
-        selectedCategory = widget.expenseCategories.first;
+        selectedCategory = '';
       }
     });
+  }
+
+  void syncSelectedCategory(List<CategoryModel> categories) {
+    if (categories.isEmpty) return;
+
+    final exists = categories.any((item) => item.name == selectedCategory);
+
+    if (!exists) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        setState(() {
+          selectedCategory = categories.first.name;
+        });
+      });
+    }
   }
 
   void showMessage(String message) {
@@ -809,200 +819,278 @@ class _RecurringTransactionFormSheetState
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
     final isEdit = widget.recurring != null;
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Container(
-                    width: 48,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  isEdit ? 'Sửa giao dịch định kỳ' : 'Thêm giao dịch định kỳ',
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Thiết lập các khoản lặp lại để giảm thao tác nhập liệu thủ công.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
+    if (user == null) {
+      return const SafeArea(child: Center(child: Text('Bạn chưa đăng nhập')));
+    }
+
+    return StreamBuilder<List<CategoryModel>>(
+      stream: _categoryService.getCategoriesByUser(user.uid),
+      builder: (context, categorySnapshot) {
+        final allCategories = categorySnapshot.data ?? [];
+
+        final currentCategories = allCategories.where((item) {
+          return item.type == selectedType;
+        }).toList();
+
+        syncSelectedCategory(currentCategories);
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _buildTypeChip(
-                        title: 'Chi tiêu',
-                        selected: selectedType == 'expense',
-                        color: AppColors.expense,
-                        onTap: () => changeType('expense'),
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildTypeChip(
-                        title: 'Thu nhập',
-                        selected: selectedType == 'income',
-                        color: AppColors.income,
-                        onTap: () => changeType('income'),
+                    const SizedBox(height: 20),
+                    Text(
+                      isEdit
+                          ? 'Sửa giao dịch định kỳ'
+                          : 'Thêm giao dịch định kỳ',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: titleController,
-                  hintText: 'Tên mẫu: Tiền trọ, Internet, Lương...',
-                  prefixIcon: Icons.repeat_rounded,
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: amountController,
-                  hintText: 'Số tiền',
-                  prefixIcon: Icons.payments_rounded,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [VndInputFormatter()],
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  borderRadius: BorderRadius.circular(18),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.category_rounded),
-                    hintText: 'Danh mục',
-                  ),
-                  items: currentCategories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: isSaving
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-
-                          setState(() {
-                            selectedCategory = value;
-                          });
-                        },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedFrequency,
-                  borderRadius: BorderRadius.circular(18),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.sync_rounded),
-                    hintText: 'Tần suất',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'daily', child: Text('Hằng ngày')),
-                    DropdownMenuItem(value: 'weekly', child: Text('Hằng tuần')),
-                    DropdownMenuItem(
-                      value: 'monthly',
-                      child: Text('Hằng tháng'),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Thiết lập các khoản lặp lại để giảm thao tác nhập liệu thủ công.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
                     ),
-                  ],
-                  onChanged: isSaving
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-
-                          setState(() {
-                            selectedFrequency = value;
-                          });
-                        },
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: isSaving ? null : pickStartDate,
-                  borderRadius: BorderRadius.circular(18),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 15,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
+                    const SizedBox(height: 20),
+                    Row(
                       children: [
-                        const Icon(
-                          Icons.calendar_month_rounded,
-                          color: AppColors.textSecondary,
+                        Expanded(
+                          child: _buildTypeChip(
+                            title: 'Chi tiêu',
+                            selected: selectedType == 'expense',
+                            color: AppColors.expense,
+                            onTap: () => changeType('expense', allCategories),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            DateFormatter.formatDate(selectedStartDate),
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          child: _buildTypeChip(
+                            title: 'Thu nhập',
+                            selected: selectedType == 'income',
+                            color: AppColors.income,
+                            onTap: () => changeType('income', allCategories),
                           ),
-                        ),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      controller: titleController,
+                      hintText: 'Tên mẫu: Tiền trọ, Internet, Lương...',
+                      prefixIcon: Icons.repeat_rounded,
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      controller: amountController,
+                      hintText: 'Số tiền',
+                      prefixIcon: Icons.payments_rounded,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [VndInputFormatter()],
+                    ),
+                    const SizedBox(height: 16),
+                    if (categorySnapshot.connectionState ==
+                        ConnectionState.waiting)
+                      const Center(child: CircularProgressIndicator())
+                    else if (currentCategories.isEmpty)
+                      _buildEmptyCategoryNotice()
+                    else
+                      DropdownButtonFormField<String>(
+                        value:
+                            currentCategories.any(
+                              (item) => item.name == selectedCategory,
+                            )
+                            ? selectedCategory
+                            : currentCategories.first.name,
+                        borderRadius: BorderRadius.circular(18),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.category_rounded),
+                          hintText: 'Danh mục',
+                        ),
+                        items: currentCategories.map((category) {
+                          return DropdownMenuItem(
+                            value: category.name,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getIconByName(category.iconName),
+                                  size: 20,
+                                  color: category.type == 'income'
+                                      ? AppColors.income
+                                      : AppColors.expense,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(category.name),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: isSaving
+                            ? null
+                            : (value) {
+                                if (value == null) return;
+
+                                setState(() {
+                                  selectedCategory = value;
+                                });
+                              },
+                      ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedFrequency,
+                      borderRadius: BorderRadius.circular(18),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.sync_rounded),
+                        hintText: 'Tần suất',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'daily',
+                          child: Text('Hằng ngày'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'weekly',
+                          child: Text('Hằng tuần'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'monthly',
+                          child: Text('Hằng tháng'),
+                        ),
+                      ],
+                      onChanged: isSaving
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+
+                              setState(() {
+                                selectedFrequency = value;
+                              });
+                            },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: isSaving ? null : pickStartDate,
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 15,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                DateFormatter.formatDate(selectedStartDate),
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    AppTextField(
+                      controller: noteController,
+                      hintText: 'Ghi chú nếu có',
+                      prefixIcon: Icons.notes_rounded,
+                    ),
+                    const SizedBox(height: 22),
+                    AppButton(
+                      text: isEdit ? 'Lưu thay đổi' : 'Tạo mẫu định kỳ',
+                      isLoading: isSaving,
+                      onPressed: () {
+                        if (isSaving) return;
+                        save();
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: noteController,
-                  hintText: 'Ghi chú nếu có',
-                  prefixIcon: Icons.notes_rounded,
-                ),
-                const SizedBox(height: 22),
-                AppButton(
-                  text: isEdit ? 'Lưu thay đổi' : 'Tạo mẫu định kỳ',
-                  isLoading: isSaving,
-                  onPressed: () {
-                    if (isSaving) return;
-                    save();
-                  },
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyCategoryNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_rounded, color: AppColors.warning),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Chưa có danh mục. Vào Cá nhân → Danh mục cá nhân để tạo danh mục mặc định.',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1036,5 +1124,36 @@ class _RecurringTransactionFormSheetState
         ),
       ),
     );
+  }
+
+  IconData _getIconByName(String iconName) {
+    switch (iconName) {
+      case 'restaurant':
+        return Icons.restaurant_rounded;
+      case 'shopping':
+        return Icons.shopping_bag_rounded;
+      case 'transport':
+        return Icons.directions_car_rounded;
+      case 'school':
+        return Icons.school_rounded;
+      case 'entertainment':
+        return Icons.movie_rounded;
+      case 'health':
+        return Icons.local_hospital_rounded;
+      case 'home':
+        return Icons.home_rounded;
+      case 'salary':
+        return Icons.payments_rounded;
+      case 'bonus':
+        return Icons.card_giftcard_rounded;
+      case 'work':
+        return Icons.work_rounded;
+      case 'investment':
+        return Icons.trending_up_rounded;
+      case 'gift':
+        return Icons.redeem_rounded;
+      default:
+        return Icons.category_rounded;
+    }
   }
 }

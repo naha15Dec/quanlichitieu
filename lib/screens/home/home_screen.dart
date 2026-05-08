@@ -6,13 +6,17 @@ import '../../core/utils/date_formatter.dart';
 import '../../core/widgets/app_card.dart';
 import '../../models/budget_model.dart';
 import '../../models/transaction_model.dart';
+import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/budget_service.dart';
 import '../../services/transaction_service.dart';
+import '../../services/user_service.dart';
 import '../budget/budget_screen.dart';
 import '../recurring/recurring_transaction_screen.dart';
 import '../transaction/add_transaction_screen.dart';
+import '../transaction/transaction_detail_screen.dart';
 import '../transaction/transaction_list_screen.dart';
+import '../notification/notification_center_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -27,83 +31,98 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: StreamBuilder<List<TransactionModel>>(
-        stream: TransactionService().getTransactionsByUser(user.uid),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: StreamBuilder<UserModel?>(
+        stream: UserService().getUserProfile(user.uid),
+        builder: (context, userSnapshot) {
+          final userProfile = userSnapshot.data;
 
-          final transactions = snapshot.data ?? [];
-          final recentTransactions = transactions.take(5).toList();
+          final displayName = _getDisplayName(
+            email: user.email ?? 'Người dùng',
+            fullName: userProfile?.fullName ?? '',
+          );
 
-          final totalIncome = transactions
-              .where((item) => item.type == 'income')
-              .fold<double>(0, (sum, item) => sum + item.amount);
+          final avatarUrl = userProfile?.avatarUrl ?? '';
 
-          final totalExpense = transactions
-              .where((item) => item.type == 'expense')
-              .fold<double>(0, (sum, item) => sum + item.amount);
+          return StreamBuilder<List<TransactionModel>>(
+            stream: TransactionService().getTransactionsByUser(user.uid),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final balance = totalIncome - totalExpense;
+              final transactions = snapshot.data ?? [];
+              final recentTransactions = transactions.take(5).toList();
 
-          final currentMonthExpense = _getCurrentMonthExpense(transactions);
-          final currentMonthKey = _getCurrentMonthKey();
+              final totalIncome = transactions
+                  .where((item) => item.type == 'income')
+                  .fold<double>(0, (sum, item) => sum + item.amount);
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 110),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(
-                  context: context,
-                  email: user.email ?? 'Người dùng',
-                  balance: balance,
-                  totalIncome: totalIncome,
-                  totalExpense: totalExpense,
-                  transactionCount: transactions.length,
-                ),
+              final totalExpense = transactions
+                  .where((item) => item.type == 'expense')
+                  .fold<double>(0, (sum, item) => sum + item.amount);
 
-                const SizedBox(height: 22),
+              final balance = totalIncome - totalExpense;
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: StreamBuilder<BudgetModel?>(
-                    stream: BudgetService().getBudgetByMonth(
-                      userId: user.uid,
-                      monthKey: currentMonthKey,
+              final currentMonthExpense = _getCurrentMonthExpense(transactions);
+              final currentMonthKey = _getCurrentMonthKey();
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 110),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(
+                      context: context,
+                      displayName: displayName,
+                      avatarUrl: avatarUrl,
+                      balance: balance,
+                      totalIncome: totalIncome,
+                      totalExpense: totalExpense,
+                      transactionCount: transactions.length,
                     ),
-                    builder: (context, budgetSnapshot) {
-                      final budget = budgetSnapshot.data;
 
-                      return _buildBudgetOverviewCard(
+                    const SizedBox(height: 22),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: StreamBuilder<BudgetModel?>(
+                        stream: BudgetService().getBudgetByMonth(
+                          userId: user.uid,
+                          monthKey: currentMonthKey,
+                        ),
+                        builder: (context, budgetSnapshot) {
+                          final budget = budgetSnapshot.data;
+
+                          return _buildBudgetOverviewCard(
+                            context: context,
+                            budget: budget,
+                            totalExpense: currentMonthExpense,
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 22),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _buildQuickActions(context),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _buildRecentTransactionsSection(
                         context: context,
-                        budget: budget,
-                        totalExpense: currentMonthExpense,
-                      );
-                    },
-                  ),
+                        transactions: transactions,
+                        recentTransactions: recentTransactions,
+                      ),
+                    ),
+                  ],
                 ),
-
-                const SizedBox(height: 22),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _buildQuickActions(context),
-                ),
-
-                const SizedBox(height: 24),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _buildRecentTransactionsSection(
-                    context: context,
-                    transactions: transactions,
-                    recentTransactions: recentTransactions,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
@@ -129,14 +148,13 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildHeader({
     required BuildContext context,
-    required String email,
+    required String displayName,
+    required String avatarUrl,
     required double balance,
     required double totalIncome,
     required double totalExpense,
     required int transactionCount,
   }) {
-    final displayName = _getDisplayName(email);
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 54, 20, 28),
@@ -152,7 +170,7 @@ class HomeScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              _buildAvatar(displayName),
+              _buildAvatar(displayName: displayName, avatarUrl: avatarUrl),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -181,16 +199,27 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.notifications_none_rounded,
-                  color: Colors.white,
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationCenterScreen(),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.notifications_none_rounded,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -493,7 +522,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar(String displayName) {
+  Widget _buildAvatar({
+    required String displayName,
+    required String avatarUrl,
+  }) {
     final firstLetter = displayName.trim().isEmpty
         ? 'U'
         : displayName.trim().characters.first.toUpperCase();
@@ -512,14 +544,39 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: Center(
-        child: Text(
-          firstLetter,
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-          ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: avatarUrl.trim().isNotEmpty
+            ? Image.network(
+                avatarUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildAvatarLetter(firstLetter);
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  );
+                },
+              )
+            : _buildAvatarLetter(firstLetter),
+      ),
+    );
+  }
+
+  Widget _buildAvatarLetter(String firstLetter) {
+    return Center(
+      child: Text(
+        firstLetter,
+        style: const TextStyle(
+          color: AppColors.primary,
+          fontSize: 22,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -789,7 +846,7 @@ class HomeScreen extends StatelessWidget {
 
                 return Column(
                   children: [
-                    _buildTransactionItem(item),
+                    _buildTransactionItem(context, item),
                     if (!isLast) const Divider(height: 28),
                   ],
                 );
@@ -862,88 +919,99 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTransactionItem(TransactionModel item) {
+  Widget _buildTransactionItem(BuildContext context, TransactionModel item) {
     final isIncome = item.type == 'income';
     final color = isIncome ? AppColors.income : AppColors.expense;
     final icon = isIncome
         ? Icons.payments_rounded
         : _getExpenseIcon(item.category);
 
-    return Row(
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(18),
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TransactionDetailScreen(transaction: item),
           ),
-          child: Icon(icon, color: color, size: 25),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.title.trim().isEmpty ? 'Không có tiêu đề' : item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
+        );
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(icon, color: color, size: 25),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title.trim().isEmpty ? 'Không có tiêu đề' : item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      item.category.trim().isEmpty ? 'Khác' : item.category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        item.category.trim().isEmpty ? 'Khác' : item.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 4,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: const BoxDecoration(
+                        color: AppColors.textMuted,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Text(
+                      DateFormatter.formatDate(item.date),
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  Container(
-                    width: 4,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: const BoxDecoration(
-                      color: AppColors.textMuted,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  Text(
-                    DateFormatter.formatDate(item.date),
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          '${isIncome ? '+' : '-'} ${CurrencyFormatter.formatVND(item.amount)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: color,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
+          const SizedBox(width: 12),
+          Text(
+            '${isIncome ? '+' : '-'} ${CurrencyFormatter.formatVND(item.amount)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -965,7 +1033,13 @@ class HomeScreen extends StatelessWidget {
     return 'Chào buổi tối 👋';
   }
 
-  String _getDisplayName(String email) {
+  String _getDisplayName({required String email, required String fullName}) {
+    final nameFromProfile = fullName.trim();
+
+    if (nameFromProfile.isNotEmpty) {
+      return nameFromProfile;
+    }
+
     if (email.trim().isEmpty) {
       return 'Người dùng';
     }

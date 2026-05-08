@@ -88,6 +88,15 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
+  void openImagePreview(String imageUrl) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ReceiptImagePreviewScreen(imageUrl: imageUrl),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final transaction = widget.transaction;
@@ -110,6 +119,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
             ),
             const SizedBox(height: 18),
             _buildInfoCard(transaction, isIncome),
+            const SizedBox(height: 18),
+            _buildReceiptImagesCard(transaction),
             const SizedBox(height: 18),
             _buildActionButtons(),
           ],
@@ -252,6 +263,113 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     );
   }
 
+  Widget _buildReceiptImagesCard(TransactionModel transaction) {
+    final images = transaction.receiptImages;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.image_rounded,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Ảnh hóa đơn',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (images.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSoft,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Text(
+                'Giao dịch này chưa có ảnh hóa đơn.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 110,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: images.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final imageUrl = images[index];
+
+                  return InkWell(
+                    onTap: () => openImagePreview(imageUrl),
+                    borderRadius: BorderRadius.circular(18),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Image.network(
+                        imageUrl,
+                        width: 110,
+                        height: 110,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+
+                          return Container(
+                            width: 110,
+                            height: 110,
+                            color: AppColors.surfaceSoft,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 110,
+                            height: 110,
+                            color: AppColors.expenseSoft,
+                            child: const Icon(
+                              Icons.broken_image_rounded,
+                              color: AppColors.expense,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoTile({
     required IconData icon,
     required String label,
@@ -389,5 +507,80 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
 
     return Icons.wallet_rounded;
+  }
+}
+
+class _ReceiptImagePreviewScreen extends StatelessWidget {
+  final String imageUrl;
+
+  const _ReceiptImagePreviewScreen({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: false,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        ),
+        title: const Text(
+          'Ảnh hóa đơn',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: InteractiveViewer(
+            minScale: 0.7,
+            maxScale: 4,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Không thể tải ảnh hóa đơn',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

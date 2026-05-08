@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../models/user_model.dart';
-import '../../screens/notification/notification_setting_screen.dart';
+import '../category/category_screen.dart';
+import '../notification/notification_setting_screen.dart';
 import '../../services/auth_service.dart';
+import '../../services/cloudinary_service.dart';
 import '../../services/user_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -18,11 +21,14 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final UserService _userService = UserService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
 
   bool isSaving = false;
+  bool isUploadingAvatar = false;
   bool hasFilledData = false;
 
   Future<void> updateProfile(String uid) async {
@@ -54,6 +60,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         setState(() {
           isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> pickAndUploadAvatar(UserModel user) async {
+    if (isUploadingAvatar) return;
+
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+        maxWidth: 1200,
+      );
+
+      if (image == null) return;
+
+      setState(() {
+        isUploadingAvatar = true;
+      });
+
+      final avatarUrl = await _cloudinaryService.uploadImage(
+        image: image,
+        folder: 'smart_expense/avatars/${user.uid}',
+      );
+
+      await _userService.updateAvatarUrl(uid: user.uid, avatarUrl: avatarUrl);
+
+      if (!mounted) return;
+
+      showMessage('Cập nhật ảnh đại diện thành công');
+    } catch (e) {
+      debugPrint('UPLOAD AVATAR ERROR: $e');
+
+      if (!mounted) return;
+
+      showMessage('Cập nhật ảnh đại diện thất bại');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isUploadingAvatar = false;
         });
       }
     }
@@ -111,6 +158,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const NotificationSettingScreen()),
+    );
+  }
+
+  void openCategoryScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CategoryScreen()),
     );
   }
 
@@ -215,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Column(
         children: [
-          _buildAvatar(displayName),
+          _buildAvatar(user, displayName),
           const SizedBox(height: 18),
           Text(
             displayName,
@@ -270,33 +324,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAvatar(String displayName) {
+  Widget _buildAvatar(UserModel user, String displayName) {
     final firstLetter = displayName.trim().isEmpty
         ? 'U'
         : displayName.trim().substring(0, 1).toUpperCase();
 
-    return Container(
-      width: 96,
-      height: 96,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(34),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 20,
-            offset: const Offset(0, 9),
+    return GestureDetector(
+      onTap: isUploadingAvatar ? null : () => pickAndUploadAvatar(user),
+      child: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          Container(
+            width: 104,
+            height: 104,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(36),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 20,
+                  offset: const Offset(0, 9),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(36),
+              child: user.avatarUrl.trim().isNotEmpty
+                  ? Image.network(
+                      user.avatarUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildAvatarLetter(firstLetter);
+                      },
+                    )
+                  : _buildAvatarLetter(firstLetter),
+            ),
+          ),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+            ),
+            child: isUploadingAvatar
+                ? const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(
+                    Icons.camera_alt_rounded,
+                    color: Colors.white,
+                    size: 17,
+                  ),
           ),
         ],
       ),
-      child: Center(
-        child: Text(
-          firstLetter,
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontSize: 38,
-            fontWeight: FontWeight.w900,
-          ),
+    );
+  }
+
+  Widget _buildAvatarLetter(String firstLetter) {
+    return Center(
+      child: Text(
+        firstLetter,
+        style: const TextStyle(
+          color: AppColors.primary,
+          fontSize: 38,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -376,6 +485,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          _buildMenuItem(
+            icon: Icons.category_rounded,
+            label: 'Danh mục cá nhân',
+            value: 'Thêm, sửa và quản lý danh mục thu chi',
+            color: AppColors.primary,
+            backgroundColor: AppColors.primaryLight,
+            onTap: openCategoryScreen,
+          ),
+          const Divider(height: 30),
           _buildMenuItem(
             icon: Icons.notifications_active_rounded,
             label: 'Nhắc nhở',

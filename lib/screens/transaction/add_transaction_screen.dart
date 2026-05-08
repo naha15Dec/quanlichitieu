@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
@@ -6,8 +7,11 @@ import '../../core/utils/vnd_input_formatter.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_text_field.dart';
+import '../../models/category_model.dart';
 import '../../models/transaction_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/category_service.dart';
+import '../../services/cloudinary_service.dart';
 import '../../services/transaction_service.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -19,35 +23,22 @@ class AddTransactionScreen extends StatefulWidget {
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TransactionService _transactionService = TransactionService();
+  final CategoryService _categoryService = CategoryService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
 
   final TextEditingController titleController = TextEditingController();
   final TextEditingController amountController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
 
+  final ImagePicker _imagePicker = ImagePicker();
+
   String selectedType = 'expense';
   String selectedCategory = 'Ăn uống';
   DateTime selectedDate = DateTime.now();
+
   bool isLoading = false;
 
-  final List<String> expenseCategories = [
-    'Ăn uống',
-    'Mua sắm',
-    'Di chuyển',
-    'Học tập',
-    'Giải trí',
-    'Sức khỏe',
-    'Nhà cửa',
-    'Khác',
-  ];
-
-  final List<String> incomeCategories = [
-    'Lương',
-    'Thưởng',
-    'Làm thêm',
-    'Đầu tư',
-    'Quà tặng',
-    'Khác',
-  ];
+  final List<XFile> selectedReceiptImages = [];
 
   final List<_QuickTransactionTemplate> quickTemplates = const [
     _QuickTransactionTemplate(
@@ -100,8 +91,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     ),
   ];
 
-  List<String> get currentCategories {
-    return selectedType == 'income' ? incomeCategories : expenseCategories;
+  @override
+  void initState() {
+    super.initState();
+    initializeDefaultCategories();
+  }
+
+  Future<void> initializeDefaultCategories() async {
+    final user = AuthService().currentUser;
+
+    if (user == null) return;
+
+    await _categoryService.createDefaultCategoriesIfNeeded(user.uid);
   }
 
   Future<void> addTransaction() async {
@@ -126,12 +127,26 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
+    if (selectedCategory.trim().isEmpty) {
+      showMessage('Vui lòng chọn danh mục');
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
 
     try {
       final now = DateTime.now();
+
+      List<String> receiptImageUrls = [];
+
+      if (selectedReceiptImages.isNotEmpty) {
+        receiptImageUrls = await _cloudinaryService.uploadImages(
+          images: selectedReceiptImages,
+          folder: 'smart_expense/receipts/${user.uid}',
+        );
+      }
 
       final transaction = TransactionModel(
         id: '',
@@ -143,6 +158,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         note: note,
         date: selectedDate,
         createdAt: now,
+        receiptImages: receiptImageUrls,
       );
 
       await _transactionService.addTransaction(transaction);
@@ -156,6 +172,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
+      debugPrint('ADD TRANSACTION ERROR: $e');
       showMessage('Thêm giao dịch thất bại');
     } finally {
       if (mounted) {
@@ -164,6 +181,38 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         });
       }
     }
+  }
+
+  Future<void> pickReceiptImages() async {
+    try {
+      final images = await _imagePicker.pickMultiImage(
+        imageQuality: 75,
+        maxWidth: 1600,
+      );
+
+      if (images.isEmpty) return;
+
+      setState(() {
+        selectedReceiptImages.addAll(images);
+      });
+    } catch (e) {
+      showMessage('Không thể chọn ảnh hóa đơn');
+    }
+  }
+
+  void removeReceiptImage(int index) {
+    setState(() {
+      selectedReceiptImages.removeAt(index);
+    });
+  }
+
+  void openLocalReceiptImagePreview(XFile image) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _LocalReceiptImagePreviewScreen(image: image),
+      ),
+    );
   }
 
   Future<void> pickTransactionDate() async {
@@ -189,12 +238,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   void changeTransactionType(String type) {
     setState(() {
       selectedType = type;
-
-      if (type == 'income') {
-        selectedCategory = incomeCategories.first;
-      } else {
-        selectedCategory = expenseCategories.first;
-      }
+      selectedCategory = type == 'income' ? 'Lương' : 'Ăn uống';
     });
   }
 
@@ -222,6 +266,22 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     });
   }
 
+  void syncSelectedCategory(List<CategoryModel> categories) {
+    if (categories.isEmpty) return;
+
+    final exists = categories.any((item) => item.name == selectedCategory);
+
+    if (!exists) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+
+        setState(() {
+          selectedCategory = categories.first.name;
+        });
+      });
+    }
+  }
+
   void showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -238,6 +298,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
+
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text('Bạn chưa đăng nhập')));
+    }
+
     final isIncome = selectedType == 'income';
     final activeColor = isIncome ? AppColors.income : AppColors.expense;
     final activeSoftColor = isIncome
@@ -247,114 +313,144 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Thêm giao dịch')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderCard(
-              isIncome: isIncome,
-              activeColor: activeColor,
-              activeSoftColor: activeSoftColor,
-            ),
-            const SizedBox(height: 18),
-            _buildQuickAddSection(),
-            const SizedBox(height: 18),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Thông tin giao dịch',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Bạn có thể dùng thêm nhanh ở trên hoặc nhập thủ công thông tin bên dưới.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  AppTextField(
-                    controller: titleController,
-                    hintText: isIncome
-                        ? 'Ví dụ: Lương tháng này'
-                        : 'Ví dụ: Ăn trưa, mua sách...',
-                    prefixIcon: Icons.edit_rounded,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  AppTextField(
-                    controller: amountController,
-                    hintText: 'Số tiền',
-                    prefixIcon: Icons.payments_rounded,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [VndInputFormatter()],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedCategory,
-                    borderRadius: BorderRadius.circular(18),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.category_rounded),
-                      hintText: 'Danh mục',
-                    ),
-                    items: currentCategories.map((category) {
-                      return DropdownMenuItem(
-                        value: category,
-                        child: Text(category),
-                      );
-                    }).toList(),
-                    onChanged: isLoading
-                        ? null
-                        : (value) {
-                            if (value == null) return;
-
-                            setState(() {
-                              selectedCategory = value;
-                            });
-                          },
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  _buildDatePicker(),
-
-                  const SizedBox(height: 16),
-
-                  AppTextField(
-                    controller: noteController,
-                    hintText: 'Ghi chú thêm nếu có',
-                    prefixIcon: Icons.notes_rounded,
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  AppButton(
-                    text: isIncome ? 'Lưu thu nhập' : 'Lưu chi tiêu',
-                    isLoading: isLoading,
-                    onPressed: () {
-                      if (isLoading) return;
-                      addTransaction();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
+      body: StreamBuilder<List<CategoryModel>>(
+        stream: _categoryService.getCategoriesByType(
+          userId: user.uid,
+          type: selectedType,
         ),
+        builder: (context, categorySnapshot) {
+          if (categorySnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final categories = categorySnapshot.data ?? [];
+          syncSelectedCategory(categories);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeaderCard(
+                  isIncome: isIncome,
+                  activeColor: activeColor,
+                  activeSoftColor: activeSoftColor,
+                ),
+                const SizedBox(height: 18),
+                _buildQuickAddSection(),
+                const SizedBox(height: 18),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Thông tin giao dịch',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Bạn có thể dùng thêm nhanh ở trên hoặc nhập thủ công thông tin bên dưới.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      AppTextField(
+                        controller: titleController,
+                        hintText: isIncome
+                            ? 'Ví dụ: Lương tháng này'
+                            : 'Ví dụ: Ăn trưa, mua sách...',
+                        prefixIcon: Icons.edit_rounded,
+                      ),
+                      const SizedBox(height: 16),
+                      AppTextField(
+                        controller: amountController,
+                        hintText: 'Số tiền',
+                        prefixIcon: Icons.payments_rounded,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [VndInputFormatter()],
+                      ),
+                      const SizedBox(height: 16),
+                      if (categories.isEmpty)
+                        _buildEmptyCategoryNotice()
+                      else
+                        DropdownButtonFormField<String>(
+                          value:
+                              categories.any(
+                                (item) => item.name == selectedCategory,
+                              )
+                              ? selectedCategory
+                              : categories.first.name,
+                          borderRadius: BorderRadius.circular(18),
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.category_rounded),
+                            hintText: 'Danh mục',
+                          ),
+                          items: categories.map((category) {
+                            return DropdownMenuItem(
+                              value: category.name,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getIconByName(category.iconName),
+                                    size: 20,
+                                    color: category.type == 'income'
+                                        ? AppColors.income
+                                        : AppColors.expense,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(category.name),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: isLoading
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+
+                                  setState(() {
+                                    selectedCategory = value;
+                                  });
+                                },
+                        ),
+                      const SizedBox(height: 16),
+                      _buildDatePicker(),
+                      const SizedBox(height: 16),
+                      AppTextField(
+                        controller: noteController,
+                        hintText: 'Ghi chú thêm nếu có',
+                        prefixIcon: Icons.notes_rounded,
+                      ),
+                      const SizedBox(height: 18),
+                      _buildReceiptPicker(),
+                      const SizedBox(height: 24),
+                      AppButton(
+                        text: isLoading
+                            ? 'Đang lưu giao dịch...'
+                            : isIncome
+                            ? 'Lưu thu nhập'
+                            : 'Lưu chi tiêu',
+                        isLoading: isLoading,
+                        onPressed: () {
+                          if (isLoading) return;
+                          addTransaction();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -581,6 +677,185 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  Widget _buildReceiptPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Ảnh hóa đơn',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Bạn có thể đính kèm ảnh hóa đơn để lưu lại bằng chứng chi tiêu.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: isLoading ? null : pickReceiptImages,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.image_rounded,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedReceiptImages.isEmpty
+                        ? 'Chọn ảnh hóa đơn'
+                        : 'Đã chọn ${selectedReceiptImages.length} ảnh',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.add_photo_alternate_rounded,
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (selectedReceiptImages.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 92,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: selectedReceiptImages.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final image = selectedReceiptImages[index];
+
+                return InkWell(
+                  onTap: isLoading
+                      ? null
+                      : () => openLocalReceiptImagePreview(image),
+                  borderRadius: BorderRadius.circular(18),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: FutureBuilder(
+                          future: image.readAsBytes(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return Container(
+                                width: 92,
+                                height: 92,
+                                color: AppColors.surfaceSoft,
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return Image.memory(
+                              snapshot.data!,
+                              width: 92,
+                              height: 92,
+                              fit: BoxFit.cover,
+                            );
+                          },
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: InkWell(
+                          onTap: isLoading
+                              ? null
+                              : () {
+                                  removeReceiptImage(index);
+                                },
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white,
+                              size: 17,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEmptyCategoryNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoft,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_rounded, color: AppColors.warning),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Chưa có danh mục. Vào Cá nhân → Danh mục cá nhân để tạo danh mục mặc định.',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDatePicker() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -679,6 +954,37 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  IconData _getIconByName(String iconName) {
+    switch (iconName) {
+      case 'restaurant':
+        return Icons.restaurant_rounded;
+      case 'shopping':
+        return Icons.shopping_bag_rounded;
+      case 'transport':
+        return Icons.directions_car_rounded;
+      case 'school':
+        return Icons.school_rounded;
+      case 'entertainment':
+        return Icons.movie_rounded;
+      case 'health':
+        return Icons.local_hospital_rounded;
+      case 'home':
+        return Icons.home_rounded;
+      case 'salary':
+        return Icons.payments_rounded;
+      case 'bonus':
+        return Icons.card_giftcard_rounded;
+      case 'work':
+        return Icons.work_rounded;
+      case 'investment':
+        return Icons.trending_up_rounded;
+      case 'gift':
+        return Icons.redeem_rounded;
+      default:
+        return Icons.category_rounded;
+    }
+  }
+
   bool _isSameDate(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -700,4 +1006,62 @@ class _QuickTransactionTemplate {
     required this.color,
     required this.backgroundColor,
   });
+}
+
+class _LocalReceiptImagePreviewScreen extends StatelessWidget {
+  final XFile image;
+
+  const _LocalReceiptImagePreviewScreen({required this.image});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+        ),
+        title: const Text(
+          'Xem ảnh hóa đơn',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: InteractiveViewer(
+            minScale: 0.7,
+            maxScale: 4,
+            child: FutureBuilder(
+              future: image.readAsBytes(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const CircularProgressIndicator(color: Colors.white);
+                }
+
+                return Image.memory(snapshot.data!, fit: BoxFit.contain);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
