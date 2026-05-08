@@ -5,6 +5,7 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../models/user_model.dart';
+import '../../screens/notification/notification_setting_screen.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 
@@ -106,6 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     hasFilledData = true;
   }
 
+  void openNotificationSetting() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationSettingScreen()),
+    );
+  }
+
   void showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -170,6 +178,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _buildProfileForm(user),
+                ),
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _buildUtilityCard(),
                 ),
                 const SizedBox(height: 18),
                 Padding(
@@ -313,24 +326,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
           AppTextField(
             controller: fullNameController,
             hintText: 'Họ tên',
             prefixIcon: Icons.person_rounded,
           ),
-
           const SizedBox(height: 16),
-
           AppTextField(
             controller: phoneController,
             hintText: 'Số điện thoại',
             prefixIcon: Icons.phone_rounded,
             keyboardType: TextInputType.phone,
           ),
-
           const SizedBox(height: 24),
-
           AppButton(
             text: 'Lưu thông tin',
             isLoading: isSaving,
@@ -338,6 +346,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (isSaving) return;
               updateProfile(user.uid);
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUtilityCard() {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tiện ích cá nhân',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Thiết lập các tiện ích hỗ trợ quá trình quản lý chi tiêu hằng ngày.',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _buildMenuItem(
+            icon: Icons.notifications_active_rounded,
+            label: 'Nhắc nhở',
+            value: 'Ghi chi tiêu và kiểm tra ngân sách',
+            color: AppColors.warning,
+            backgroundColor: AppColors.warningSoft,
+            onTap: openNotificationSetting,
           ),
         ],
       ),
@@ -374,6 +419,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icons.lock_rounded,
             label: 'Bảo mật',
             value: 'Firebase Authentication',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required Color backgroundColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Icon(icon, color: color, size: 23),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: AppColors.textMuted,
+            size: 16,
           ),
         ],
       ),
