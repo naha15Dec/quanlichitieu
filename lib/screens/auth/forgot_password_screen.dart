@@ -27,6 +27,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       return;
     }
 
+    if (!email.contains('@')) {
+      showMessage('Email không hợp lệ');
+      return;
+    }
+
     setState(() {
       isLoading = true;
     });
@@ -40,13 +45,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         'Nếu email tồn tại trong hệ thống, liên kết đặt lại mật khẩu đã được gửi.',
       );
 
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 900));
 
       if (!mounted) return;
 
       Navigator.pop(context);
     } catch (e) {
-      showMessage('Gửi email thất bại. Vui lòng kiểm tra lại email.');
+      showMessage(e.toString());
     } finally {
       if (mounted) {
         setState(() {
@@ -71,48 +76,137 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Quên mật khẩu')),
+      backgroundColor: AppColors.background,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Đặt lại mật khẩu',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Transform.translate(
+              offset: const Offset(0, -34),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildResetCard(),
               ),
-
-              const SizedBox(height: 8),
-
-              const Text(
-                'Nhập email tài khoản của bạn. Hệ thống sẽ gửi liên kết đặt lại mật khẩu qua email.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-
-              const SizedBox(height: 24),
-
-              AppTextField(
-                controller: emailController,
-                hintText: 'Email',
-                prefixIcon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
-              ),
-
-              const SizedBox(height: 24),
-
-              AppButton(
-                text: 'Gửi email đặt lại mật khẩu',
-                isLoading: isLoading,
-                onPressed: resetPassword,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 64, 24, 76),
+      decoration: const BoxDecoration(
+        gradient: AppColors.primaryGradient,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(36),
+          bottomRight: Radius.circular(36),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.lock_reset_rounded,
+              color: AppColors.primary,
+              size: 34,
+            ),
+          ),
+          const SizedBox(height: 26),
+          const Text(
+            'Quên mật khẩu?',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Nhập email tài khoản của bạn,\nhệ thống sẽ gửi liên kết đặt lại mật khẩu.',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResetCard() {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Đặt lại mật khẩu',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Vui lòng nhập email đã dùng để đăng ký tài khoản. Nếu email hợp lệ, bạn sẽ nhận được liên kết đặt lại mật khẩu.',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          AppTextField(
+            controller: emailController,
+            hintText: 'Email',
+            prefixIcon: Icons.email_rounded,
+            keyboardType: TextInputType.emailAddress,
+          ),
+
+          const SizedBox(height: 24),
+
+          AppButton(
+            text: 'Gửi email đặt lại mật khẩu',
+            isLoading: isLoading,
+            onPressed: () {
+              if (isLoading) return;
+              resetPassword();
+            },
+          ),
+
+          const SizedBox(height: 14),
+
+          Center(
+            child: TextButton.icon(
+              onPressed: isLoading ? null : () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+              label: const Text('Quay lại đăng nhập'),
+            ),
+          ),
+        ],
       ),
     );
   }

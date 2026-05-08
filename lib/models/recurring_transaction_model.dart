@@ -1,24 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class TransactionModel {
+class RecurringTransactionModel {
   final String id;
   final String userId;
   final String title;
   final double amount;
-
-  // income hoặc expense
   final String type;
-
   final String category;
   final String note;
-  final DateTime date;
+  final String frequency; // daily, weekly, monthly
+  final DateTime startDate;
+  final DateTime nextRunDate;
+  final bool isActive;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
-  // Dùng cho upload hóa đơn sau này bằng Cloudinary
-  final List<String> receiptImages;
-
-  TransactionModel({
+  RecurringTransactionModel({
     required this.id,
     required this.userId,
     required this.title,
@@ -26,22 +23,20 @@ class TransactionModel {
     required this.type,
     required this.category,
     required this.note,
-    required this.date,
+    required this.frequency,
+    required this.startDate,
+    required this.nextRunDate,
+    required this.isActive,
     required this.createdAt,
     this.updatedAt,
-    this.receiptImages = const [],
   });
 
-  bool get isIncome => type == 'income';
-
-  bool get isExpense => type == 'expense';
-
-  factory TransactionModel.fromFirestore(
+  factory RecurringTransactionModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final data = doc.data() ?? {};
 
-    return TransactionModel(
+    return RecurringTransactionModel(
       id: doc.id,
       userId: data['userId'] ?? '',
       title: data['title'] ?? '',
@@ -49,12 +44,14 @@ class TransactionModel {
       type: data['type'] ?? 'expense',
       category: data['category'] ?? '',
       note: data['note'] ?? '',
-      date: _timestampToDateTime(data['date']),
+      frequency: data['frequency'] ?? 'monthly',
+      startDate: _timestampToDateTime(data['startDate']),
+      nextRunDate: _timestampToDateTime(data['nextRunDate']),
+      isActive: data['isActive'] ?? true,
       createdAt: _timestampToDateTime(data['createdAt']),
       updatedAt: data['updatedAt'] == null
           ? null
           : _timestampToDateTime(data['updatedAt']),
-      receiptImages: List<String>.from(data['receiptImages'] ?? []),
     );
   }
 
@@ -66,9 +63,11 @@ class TransactionModel {
       'type': type.trim().isEmpty ? 'expense' : type.trim(),
       'category': category.trim(),
       'note': note.trim(),
-      'date': Timestamp.fromDate(date),
+      'frequency': frequency,
+      'startDate': Timestamp.fromDate(startDate),
+      'nextRunDate': Timestamp.fromDate(nextRunDate),
+      'isActive': isActive,
       'createdAt': Timestamp.fromDate(createdAt),
-      'receiptImages': receiptImages,
     };
 
     if (updatedAt != null) {
@@ -78,7 +77,7 @@ class TransactionModel {
     return map;
   }
 
-  TransactionModel copyWith({
+  RecurringTransactionModel copyWith({
     String? id,
     String? userId,
     String? title,
@@ -86,12 +85,14 @@ class TransactionModel {
     String? type,
     String? category,
     String? note,
-    DateTime? date,
+    String? frequency,
+    DateTime? startDate,
+    DateTime? nextRunDate,
+    bool? isActive,
     DateTime? createdAt,
     DateTime? updatedAt,
-    List<String>? receiptImages,
   }) {
-    return TransactionModel(
+    return RecurringTransactionModel(
       id: id ?? this.id,
       userId: userId ?? this.userId,
       title: title ?? this.title,
@@ -99,10 +100,12 @@ class TransactionModel {
       type: type ?? this.type,
       category: category ?? this.category,
       note: note ?? this.note,
-      date: date ?? this.date,
+      frequency: frequency ?? this.frequency,
+      startDate: startDate ?? this.startDate,
+      nextRunDate: nextRunDate ?? this.nextRunDate,
+      isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      receiptImages: receiptImages ?? this.receiptImages,
     );
   }
 

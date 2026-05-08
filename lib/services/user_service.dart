@@ -8,21 +8,42 @@ class UserService {
       .collection('users');
 
   Future<void> createUserIfNotExists(UserModel user) async {
-    final doc = await _users.doc(user.uid).get();
+    final docRef = _users.doc(user.uid);
+    final doc = await docRef.get();
 
     if (!doc.exists) {
-      await _users.doc(user.uid).set(user.toMap());
+      final now = DateTime.now();
+
+      final newUser = user.copyWith(
+        createdAt: user.createdAt ?? now,
+        updatedAt: user.updatedAt ?? now,
+      );
+
+      await docRef.set(newUser.toMap());
     }
   }
 
   Stream<UserModel?> getUserProfile(String uid) {
     return _users.doc(uid).snapshots().map((doc) {
-      if (!doc.exists || doc.data() == null) {
+      final data = doc.data();
+
+      if (!doc.exists || data == null) {
         return null;
       }
 
-      return UserModel.fromMap(doc.data()!);
+      return UserModel.fromMap(data);
     });
+  }
+
+  Future<UserModel?> getUserProfileOnce(String uid) async {
+    final doc = await _users.doc(uid).get();
+    final data = doc.data();
+
+    if (!doc.exists || data == null) {
+      return null;
+    }
+
+    return UserModel.fromMap(data);
   }
 
   Future<void> updateUserProfile({
@@ -30,13 +51,20 @@ class UserService {
     required String fullName,
     required String phone,
   }) async {
-    await _users.doc(uid).update({'fullName': fullName, 'phone': phone});
+    await _users.doc(uid).update({
+      'fullName': fullName.trim(),
+      'phone': phone.trim(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
   }
 
   Future<void> updateAvatarUrl({
     required String uid,
     required String avatarUrl,
   }) async {
-    await _users.doc(uid).update({'avatarUrl': avatarUrl});
+    await _users.doc(uid).update({
+      'avatarUrl': avatarUrl.trim(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
   }
 }
