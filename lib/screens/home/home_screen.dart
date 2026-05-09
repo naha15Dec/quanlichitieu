@@ -17,6 +17,7 @@ import '../transaction/add_transaction_screen.dart';
 import '../transaction/transaction_detail_screen.dart';
 import '../transaction/transaction_list_screen.dart';
 import '../notification/notification_center_screen.dart';
+import '../chatbot/chatbot_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -31,100 +32,114 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: StreamBuilder<UserModel?>(
-        stream: UserService().getUserProfile(user.uid),
-        builder: (context, userSnapshot) {
-          final userProfile = userSnapshot.data;
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: StreamBuilder<UserModel?>(
+              stream: UserService().getUserProfile(user.uid),
+              builder: (context, userSnapshot) {
+                final userProfile = userSnapshot.data;
 
-          final displayName = _getDisplayName(
-            email: user.email ?? 'Người dùng',
-            fullName: userProfile?.fullName ?? '',
-          );
+                final displayName = _getDisplayName(
+                  email: user.email ?? 'Người dùng',
+                  fullName: userProfile?.fullName ?? '',
+                );
 
-          final avatarUrl = userProfile?.avatarUrl ?? '';
+                final avatarUrl = userProfile?.avatarUrl ?? '';
 
-          return StreamBuilder<List<TransactionModel>>(
-            stream: TransactionService().getTransactionsByUser(user.uid),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+                return StreamBuilder<List<TransactionModel>>(
+                  stream: TransactionService().getTransactionsByUser(user.uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-              final transactions = snapshot.data ?? [];
-              final recentTransactions = transactions.take(5).toList();
+                    final transactions = snapshot.data ?? [];
+                    final recentTransactions = transactions.take(5).toList();
 
-              final totalIncome = transactions
-                  .where((item) => item.type == 'income')
-                  .fold<double>(0, (sum, item) => sum + item.amount);
+                    final totalIncome = transactions
+                        .where((item) => item.type == 'income')
+                        .fold<double>(0, (sum, item) => sum + item.amount);
 
-              final totalExpense = transactions
-                  .where((item) => item.type == 'expense')
-                  .fold<double>(0, (sum, item) => sum + item.amount);
+                    final totalExpense = transactions
+                        .where((item) => item.type == 'expense')
+                        .fold<double>(0, (sum, item) => sum + item.amount);
 
-              final balance = totalIncome - totalExpense;
+                    final balance = totalIncome - totalExpense;
 
-              final currentMonthExpense = _getCurrentMonthExpense(transactions);
-              final currentMonthKey = _getCurrentMonthKey();
+                    final currentMonthExpense = _getCurrentMonthExpense(
+                      transactions,
+                    );
+                    final currentMonthKey = _getCurrentMonthKey();
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 110),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(
-                      context: context,
-                      displayName: displayName,
-                      avatarUrl: avatarUrl,
-                      balance: balance,
-                      totalIncome: totalIncome,
-                      totalExpense: totalExpense,
-                      transactionCount: transactions.length,
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: StreamBuilder<BudgetModel?>(
-                        stream: BudgetService().getBudgetByMonth(
-                          userId: user.uid,
-                          monthKey: currentMonthKey,
-                        ),
-                        builder: (context, budgetSnapshot) {
-                          final budget = budgetSnapshot.data;
-
-                          return _buildBudgetOverviewCard(
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildHeader(
                             context: context,
-                            budget: budget,
-                            totalExpense: currentMonthExpense,
-                          );
-                        },
+                            displayName: displayName,
+                            avatarUrl: avatarUrl,
+                            balance: balance,
+                            totalIncome: totalIncome,
+                            totalExpense: totalExpense,
+                            transactionCount: transactions.length,
+                          ),
+
+                          const SizedBox(height: 22),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: StreamBuilder<BudgetModel?>(
+                              stream: BudgetService().getBudgetByMonth(
+                                userId: user.uid,
+                                monthKey: currentMonthKey,
+                              ),
+                              builder: (context, budgetSnapshot) {
+                                final budget = budgetSnapshot.data;
+
+                                return _buildBudgetOverviewCard(
+                                  context: context,
+                                  budget: budget,
+                                  totalExpense: currentMonthExpense,
+                                );
+                              },
+                            ),
+                          ),
+
+                          const SizedBox(height: 22),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildQuickActions(context),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildRecentTransactionsSection(
+                              context: context,
+                              transactions: transactions,
+                              recentTransactions: recentTransactions,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
 
-                    const SizedBox(height: 22),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildQuickActions(context),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildRecentTransactionsSection(
-                        context: context,
-                        transactions: transactions,
-                        recentTransactions: recentTransactions,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+          Positioned(
+            right: 20,
+            bottom: 20,
+            child: _buildChatbotFloatingButton(context),
+          ),
+        ],
       ),
     );
   }
@@ -1087,5 +1102,46 @@ class HomeScreen extends StatelessWidget {
     }
 
     return Icons.wallet_rounded;
+  }
+
+  Widget _buildChatbotFloatingButton(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ChatbotScreen()),
+        );
+      },
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.smart_toy_rounded, color: Colors.white, size: 21),
+            SizedBox(width: 8),
+            Text(
+              'Trợ lý',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

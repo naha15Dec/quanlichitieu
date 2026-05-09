@@ -21,6 +21,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
 
   String _keyword = '';
   String _selectedType = 'all';
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   void dispose() {
@@ -34,6 +35,10 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     return transactions.where((item) {
       final keyword = _keyword.trim().toLowerCase();
 
+      final matchMonth =
+          item.date.year == _selectedMonth.year &&
+          item.date.month == _selectedMonth.month;
+
       final matchKeyword =
           keyword.isEmpty ||
           item.title.toLowerCase().contains(keyword) ||
@@ -42,8 +47,40 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
 
       final matchType = _selectedType == 'all' || item.type == _selectedType;
 
-      return matchKeyword && matchType;
+      return matchMonth && matchKeyword && matchType;
     }).toList();
+  }
+
+  Future<void> _pickMonth() async {
+    final pickedMonth = await showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _MonthPickerSheet(initialMonth: _selectedMonth);
+      },
+    );
+
+    if (pickedMonth == null) return;
+
+    setState(() {
+      _selectedMonth = DateTime(pickedMonth.year, pickedMonth.month);
+    });
+  }
+
+  void _goToPreviousMonth() {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+    });
+  }
+
+  void _goToNextMonth() {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
+    });
+  }
+
+  String _monthTitle(DateTime date) {
+    return 'Tháng ${date.month}/${date.year}';
   }
 
   @override
@@ -66,6 +103,11 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
 
           final transactions = snapshot.data ?? [];
           final filteredTransactions = _filterTransactions(transactions);
+
+          final monthTransactions = transactions.where((item) {
+            return item.date.year == _selectedMonth.year &&
+                item.date.month == _selectedMonth.month;
+          }).toList();
 
           final totalIncome = filteredTransactions
               .where((item) => item.type == 'income')
@@ -97,8 +139,11 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                         totalIncome: totalIncome,
                         totalExpense: totalExpense,
                         count: filteredTransactions.length,
+                        totalMonthCount: monthTransactions.length,
                       ),
                       const SizedBox(height: 18),
+                      _buildMonthSelector(),
+                      const SizedBox(height: 14),
                       _buildSearchBox(),
                       const SizedBox(height: 14),
                       _buildTypeFilters(),
@@ -106,7 +151,6 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                   ),
                 ),
               ),
-
               if (transactions.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -115,6 +159,16 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                     title: 'Chưa có giao dịch nào',
                     message:
                         'Hãy thêm giao dịch đầu tiên để bắt đầu theo dõi thu chi cá nhân.',
+                  ),
+                )
+              else if (monthTransactions.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmptyState(
+                    icon: Icons.calendar_month_rounded,
+                    title: 'Không có giao dịch trong tháng này',
+                    message:
+                        'Hãy đổi sang tháng khác hoặc thêm giao dịch mới cho ${_monthTitle(_selectedMonth)}.',
                   ),
                 )
               else if (filteredTransactions.isEmpty)
@@ -158,6 +212,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     required double totalIncome,
     required double totalExpense,
     required int count,
+    required int totalMonthCount,
   }) {
     return Container(
       width: double.infinity,
@@ -176,9 +231,9 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Tổng quan giao dịch',
-            style: TextStyle(
+          Text(
+            _monthTitle(_selectedMonth),
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -192,6 +247,17 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
               fontSize: 28,
               fontWeight: FontWeight.w900,
               letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            count == totalMonthCount
+                ? 'Tổng giao dịch trong tháng'
+                : 'Đang lọc từ $totalMonthCount giao dịch trong tháng',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 18),
@@ -276,6 +342,68 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     );
   }
 
+  Widget _buildMonthSelector() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _goToPreviousMonth,
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: _pickMonth,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.calendar_month_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _monthTitle(_selectedMonth),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _goToNextMonth,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchBox() {
     return TextField(
       controller: _searchController,
@@ -285,7 +413,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
         });
       },
       decoration: InputDecoration(
-        hintText: 'Tìm theo tên, danh mục, ghi chú...',
+        hintText: 'Tìm trong ${_monthTitle(_selectedMonth).toLowerCase()}...',
         prefixIcon: const Icon(
           Icons.search_rounded,
           color: AppColors.textSecondary,
@@ -628,5 +756,149 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     }
 
     return Icons.wallet_rounded;
+  }
+}
+
+class _MonthPickerSheet extends StatefulWidget {
+  final DateTime initialMonth;
+
+  const _MonthPickerSheet({required this.initialMonth});
+
+  @override
+  State<_MonthPickerSheet> createState() => _MonthPickerSheetState();
+}
+
+class _MonthPickerSheetState extends State<_MonthPickerSheet> {
+  late int selectedYear;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedYear = widget.initialMonth.year;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      selectedYear--;
+                    });
+                  },
+                  icon: const Icon(Icons.chevron_left_rounded),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      '$selectedYear',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: selectedYear >= now.year
+                      ? null
+                      : () {
+                          setState(() {
+                            selectedYear++;
+                          });
+                        },
+                  icon: const Icon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            GridView.builder(
+              shrinkWrap: true,
+              itemCount: 12,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 2.2,
+              ),
+              itemBuilder: (context, index) {
+                final month = index + 1;
+                final isSelected =
+                    selectedYear == widget.initialMonth.year &&
+                    month == widget.initialMonth.month;
+
+                final isFutureMonth =
+                    selectedYear > now.year ||
+                    (selectedYear == now.year && month > now.month);
+
+                return InkWell(
+                  onTap: isFutureMonth
+                      ? null
+                      : () {
+                          Navigator.pop(context, DateTime(selectedYear, month));
+                        },
+                  borderRadius: BorderRadius.circular(18),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary
+                          : isFutureMonth
+                          ? AppColors.surfaceSoft
+                          : AppColors.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.border,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Tháng $month',
+                        style: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : isFutureMonth
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

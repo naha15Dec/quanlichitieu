@@ -9,6 +9,7 @@ import '../../models/transaction_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/budget_service.dart';
 import '../../services/transaction_service.dart';
+import '../summary/financial_summary_screen.dart';
 
 class ReportScreen extends StatelessWidget {
   const ReportScreen({super.key});
@@ -87,6 +88,8 @@ class ReportScreen extends StatelessWidget {
                       balance: balance,
                       transactionCount: currentMonthTransactions.length,
                     ),
+                    const SizedBox(height: 20),
+                    _buildFinancialSummaryEntryCard(context),
                     const SizedBox(height: 20),
                     _buildBudgetReportCard(
                       budget: budget,
@@ -386,6 +389,83 @@ class ReportScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFinancialSummaryEntryCard(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const FinancialSummaryScreen()),
+        );
+      },
+      borderRadius: BorderRadius.circular(28),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.summarize_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tóm tắt tài chính',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Xem tổng hợp thu chi theo tuần, tháng và gợi ý từ hệ thống.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: AppColors.textMuted,
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }
