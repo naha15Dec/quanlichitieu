@@ -288,7 +288,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               const SizedBox(width: 14),
               const Expanded(
                 child: Text(
-                  'Ảnh hóa đơn',
+                  'Ảnh giao dịch',
                   style: TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 18,
@@ -308,7 +308,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 borderRadius: BorderRadius.circular(18),
               ),
               child: const Text(
-                'Giao dịch này chưa có ảnh hóa đơn.',
+                'Giao dịch này chưa có ảnh giao dịch.',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
@@ -322,7 +322,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: images.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   final imageUrl = images[index];
 
@@ -532,7 +532,7 @@ class _ReceiptImagePreviewScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
         title: const Text(
-          'Ảnh hóa đơn',
+          'Ảnh giao dịch',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -567,7 +567,7 @@ class _ReceiptImagePreviewScreen extends StatelessWidget {
                 return const Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
-                    'Không thể tải ảnh hóa đơn',
+                    'Không thể tải ảnh giao dịch',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,

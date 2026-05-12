@@ -35,3 +35,8 @@ double parseVndInput(String value) {
 
   return double.parse(digits);
 }
+
+String formatVndInput(int value) {
+  final formatter = NumberFormat.decimalPattern('vi_VN');
+  return formatter.format(value);
+}

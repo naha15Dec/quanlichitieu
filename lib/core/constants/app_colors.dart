@@ -24,6 +24,7 @@ class AppColors {
   // Finance states
   static const Color income = Color(0xFF16A34A);
   static const Color incomeSoft = Color(0xFFDCFCE7);
+  static const Color successSoft = Color(0xFFDCFCE7);
 
   static const Color expense = Color(0xFFDC2626);
   static const Color expenseSoft = Color(0xFFFEE2E2);

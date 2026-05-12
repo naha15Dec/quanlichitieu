@@ -45,6 +45,21 @@ class TransactionService {
     });
   }
 
+  Stream<List<TransactionModel>> getPhotoTransactionsByUser(String userId) {
+    return _transactions.where('userId', isEqualTo: userId).snapshots().map((
+      snapshot,
+    ) {
+      final transactions = snapshot.docs
+          .map((doc) => TransactionModel.fromFirestore(doc))
+          .where((transaction) => transaction.receiptImages.isNotEmpty)
+          .toList();
+
+      transactions.sort((a, b) => b.date.compareTo(a.date));
+
+      return transactions;
+    });
+  }
+
   Future<void> updateTransaction(TransactionModel transaction) async {
     final updatedTransaction = transaction.copyWith(updatedAt: DateTime.now());
 

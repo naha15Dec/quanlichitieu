@@ -341,7 +341,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                         _buildEmptyCategoryNotice()
                       else
                         DropdownButtonFormField<String>(
-                          value:
+                          initialValue:
                               currentCategories.any(
                                 (item) => item.name == selectedCategory,
                               )

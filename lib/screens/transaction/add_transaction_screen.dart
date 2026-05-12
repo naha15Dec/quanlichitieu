@@ -382,7 +382,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         _buildEmptyCategoryNotice()
                       else
                         DropdownButtonFormField<String>(
-                          value:
+                          initialValue:
                               categories.any(
                                 (item) => item.name == selectedCategory,
                               )
@@ -753,7 +753,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: selectedReceiptImages.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final image = selectedReceiptImages[index];
 

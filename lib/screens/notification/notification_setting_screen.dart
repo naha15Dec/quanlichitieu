@@ -377,7 +377,7 @@ class _NotificationSettingScreenState extends State<NotificationSettingScreen> {
         ),
         Switch(
           value: value,
-          activeColor: AppColors.primary,
+          activeThumbColor: AppColors.primary,
           onChanged: onChanged,
         ),
       ],

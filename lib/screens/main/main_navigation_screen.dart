@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 import '../transaction/add_transaction_screen.dart';
+import '../transaction/photo_quick_add_screen.dart';
 import '../transaction/transaction_list_screen.dart';
 import '../report/report_screen.dart';
 
@@ -37,6 +38,164 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  void _openPhotoQuickAddScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PhotoQuickAddScreen()),
+    );
+  }
+
+  void _showAddTransactionOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Thêm giao dịch',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Chọn cách bạn muốn ghi nhận khoản thu chi.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              _buildAddOptionTile(
+                icon: Icons.edit_note_rounded,
+                iconColor: AppColors.primary,
+                iconBackground: AppColors.primaryLight,
+                title: 'Nhập thủ công',
+                subtitle: 'Nhập đầy đủ tên, số tiền, danh mục và ghi chú.',
+                onTap: () {
+                  Navigator.pop(context);
+                  _openAddTransactionScreen();
+                },
+              ),
+
+              const SizedBox(height: 12),
+
+              _buildAddOptionTile(
+                icon: Icons.camera_alt_rounded,
+                iconColor: AppColors.income,
+                iconBackground: AppColors.incomeSoft,
+                title: 'Ghi nhanh bằng ảnh',
+                subtitle:
+                    'Chụp ảnh khoảnh khắc chi tiêu và nhập nhanh số tiền.',
+                onTap: () {
+                  Navigator.pop(context);
+                  _openPhotoQuickAddScreen();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddOptionTile({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBackground,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: iconBackground,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, color: iconColor),
+            ),
+            const SizedBox(width: 14),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,7 +216,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
         child: FloatingActionButton(
-          onPressed: _openAddTransactionScreen,
+          onPressed: _showAddTransactionOptions,
           elevation: 0,
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,

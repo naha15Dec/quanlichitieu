@@ -486,7 +486,7 @@ class _RecurringTransactionScreenState
               ),
               Switch(
                 value: item.isActive,
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
                 onChanged: (_) {
                   toggleActive(item);
                 },
@@ -931,7 +931,7 @@ class _RecurringTransactionFormSheetState
                       _buildEmptyCategoryNotice()
                     else
                       DropdownButtonFormField<String>(
-                        value:
+                        initialValue:
                             currentCategories.any(
                               (item) => item.name == selectedCategory,
                             )
@@ -972,7 +972,7 @@ class _RecurringTransactionFormSheetState
                       ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: selectedFrequency,
+                      initialValue: selectedFrequency,
                       borderRadius: BorderRadius.circular(18),
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.sync_rounded),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -7,6 +9,7 @@ import '../../core/widgets/app_card.dart';
 import '../../models/transaction_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/transaction_service.dart';
+import 'photo_journal_screen.dart';
 import 'transaction_detail_screen.dart';
 
 class TransactionListScreen extends StatefulWidget {
@@ -19,14 +22,48 @@ class TransactionListScreen extends StatefulWidget {
 class _TransactionListScreenState extends State<TransactionListScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  Timer? _searchDebounce;
+  Stream<List<TransactionModel>>? _transactionsStream;
+  String? _streamUserId;
+
   String _keyword = '';
   String _selectedType = 'all';
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _prepareTransactionStream(String userId) {
+    if (_transactionsStream != null && _streamUserId == userId) return;
+
+    _streamUserId = userId;
+    _transactionsStream = TransactionService().getTransactionsByUser(userId);
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+
+      setState(() {
+        _keyword = value;
+      });
+    });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+
+    _searchController.clear();
+
+    setState(() {
+      _keyword = '';
+    });
   }
 
   List<TransactionModel> _filterTransactions(
@@ -83,6 +120,13 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     return 'Tháng ${date.month}/${date.year}';
   }
 
+  void _openPhotoJournal() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PhotoJournalScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
@@ -91,11 +135,13 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
       return const Scaffold(body: Center(child: Text('Bạn chưa đăng nhập')));
     }
 
+    _prepareTransactionStream(user.uid);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Giao dịch')),
       body: StreamBuilder<List<TransactionModel>>(
-        stream: TransactionService().getTransactionsByUser(user.uid),
+        stream: _transactionsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -143,6 +189,8 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                       ),
                       const SizedBox(height: 18),
                       _buildMonthSelector(),
+                      const SizedBox(height: 14),
+                      _buildPhotoJournalEntry(),
                       const SizedBox(height: 14),
                       _buildSearchBox(),
                       const SizedBox(height: 14),
@@ -404,14 +452,104 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     );
   }
 
+  Widget _buildPhotoJournalEntry() {
+    return InkWell(
+      onTap: _openPhotoJournal,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 14,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.photo_library_rounded,
+                color: Colors.white,
+                size: 25,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nhật ký ảnh',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Xem lại các giao dịch đã lưu bằng hình ảnh.',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Xem tất cả',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(width: 5),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    color: AppColors.primary,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBox() {
     return TextField(
       controller: _searchController,
-      onChanged: (value) {
-        setState(() {
-          _keyword = value;
-        });
-      },
+      onChanged: _onSearchChanged,
       decoration: InputDecoration(
         hintText: 'Tìm trong ${_monthTitle(_selectedMonth).toLowerCase()}...',
         prefixIcon: const Icon(
@@ -421,12 +559,7 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
         suffixIcon: _keyword.isEmpty
             ? null
             : IconButton(
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() {
-                    _keyword = '';
-                  });
-                },
+                onPressed: _clearSearch,
                 icon: const Icon(Icons.close_rounded),
               ),
       ),
@@ -586,6 +719,8 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
         ? Icons.payments_rounded
         : _getExpenseIcon(item.category);
 
+    final hasPhoto = item.receiptImages.isNotEmpty;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -593,15 +728,21 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
+            if (hasPhoto)
+              ClipRRect(
                 borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, color: color, size: 25),
-            ),
+                child: Image.network(
+                  item.receiptImages.first,
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildIconBox(color: color, icon: icon);
+                  },
+                ),
+              )
+            else
+              _buildIconBox(color: color, icon: icon),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -632,6 +773,22 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                           ),
                         ),
                       ),
+                      if (hasPhoto) ...[
+                        Container(
+                          width: 4,
+                          height: 4,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.textMuted,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.image_rounded,
+                          size: 15,
+                          color: AppColors.textMuted,
+                        ),
+                      ],
                       if (item.note.trim().isNotEmpty) ...[
                         Container(
                           width: 4,
@@ -667,6 +824,18 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildIconBox({required Color color, required IconData icon}) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Icon(icon, color: color, size: 25),
     );
   }
 
